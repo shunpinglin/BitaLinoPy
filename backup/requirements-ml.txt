@@ -1,0 +1,6 @@
+torch==<依你CPU/GPU選對版本>
+transformers
+accelerate
+tokenizers
+safetensors
+huggingface-hub

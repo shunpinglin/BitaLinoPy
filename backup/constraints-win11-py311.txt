@@ -1,0 +1,15 @@
+# Constraints for transitive dependencies (Win11 + Python 3.11)
+# GUI stack
+pyqt6-qt6==6.6.0
+pyqt6-sip==13.10.2
+
+# Bleak on Windows
+typing_extensions==4.14.1
+winrt-runtime==3.2.1
+winrt-Windows.Devices.Bluetooth==3.2.1
+winrt-Windows.Devices.Bluetooth.Advertisement==3.2.1
+winrt-Windows.Devices.Bluetooth.GenericAttributeProfile==3.2.1
+winrt-Windows.Devices.Enumeration==3.2.1
+winrt-Windows.Foundation==3.2.1
+winrt-Windows.Foundation.Collections==3.2.1
+winrt-Windows.Storage.Streams==3.2.1

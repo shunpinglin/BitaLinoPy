@@ -1,0 +1,6 @@
+matplotlib
+pandas
+scipy
+psutil
+reportlab
+requests

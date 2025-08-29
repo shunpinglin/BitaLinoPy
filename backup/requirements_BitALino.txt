@@ -1,0 +1,6 @@
+bitalino
+bleak
+pyserial
+numpy
+PyQt6
+pyqtgraph

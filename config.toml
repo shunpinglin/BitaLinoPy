@@ -1,0 +1,28 @@
+# 連線模式："BLE" 或 "SERIAL"
+mode = "BLE"
+# 若為 BLE，填 MAC；若為 SERIAL，填 COM 例如 COM5
+address = "bc:33:ac:ab:ad:b4"
+
+# mode = "SERIAL"
+# address = "COM5"      # ← 用螢幕裡的 Outgoing 埠
+
+# 取樣率（Hz）：BITalino 常見 1, 10, 100, 1000
+
+sampling_rate = 1000
+
+# 需要讀的「類比通道」索引（A1→0, A2→1, ... A6→5）
+
+analog_channels = [0] # 先只讀 ECG 所在的 A2
+
+# 每次讀幾筆（批次大小）；數值越大、主迴圈越慢
+
+block_size = 20
+
+[subject_defaults]
+name = "林測試"
+age  = 62
+sex  = "男"   # "男" 或 "女"
+
+# 計算出的參數
+# actual_update_hz = sampling_rate / block_size  # 20 Hz
+# interval_ms = int(1000 / actual_update_hz)     # 50 ms
