@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>870</width>
-    <height>523</height>
+    <width>774</width>
+    <height>430</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,7 +19,7 @@
      <rect>
       <x>10</x>
       <y>10</y>
-      <width>741</width>
+      <width>621</width>
       <height>161</height>
      </rect>
     </property>
@@ -27,15 +27,15 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>20</y>
+       <y>15</y>
        <width>47</width>
-       <height>16</height>
+       <height>21</height>
       </rect>
      </property>
      <property name="font">
       <font>
        <family>微軟正黑體</family>
-       <pointsize>12</pointsize>
+       <pointsize>13</pointsize>
       </font>
      </property>
      <property name="text">
@@ -54,7 +54,7 @@
      <property name="font">
       <font>
        <family>微軟正黑體</family>
-       <pointsize>12</pointsize>
+       <pointsize>13</pointsize>
       </font>
      </property>
      <property name="text">
@@ -73,7 +73,7 @@
      <property name="font">
       <font>
        <family>微軟正黑體</family>
-       <pointsize>12</pointsize>
+       <pointsize>13</pointsize>
       </font>
      </property>
      <property name="title">
@@ -91,7 +91,7 @@
       <property name="font">
        <font>
         <family>微軟正黑體</family>
-        <pointsize>12</pointsize>
+        <pointsize>13</pointsize>
        </font>
       </property>
       <property name="text">
@@ -110,7 +110,7 @@
       <property name="font">
        <font>
         <family>微軟正黑體</family>
-        <pointsize>12</pointsize>
+        <pointsize>13</pointsize>
        </font>
       </property>
       <property name="text">
@@ -161,14 +161,14 @@
       <rect>
        <x>410</x>
        <y>30</y>
-       <width>261</width>
+       <width>191</width>
        <height>31</height>
       </rect>
      </property>
      <property name="font">
       <font>
        <family>微軟正黑體</family>
-       <pointsize>12</pointsize>
+       <pointsize>14</pointsize>
       </font>
      </property>
      <property name="text">
@@ -180,7 +180,7 @@
       <rect>
        <x>410</x>
        <y>80</y>
-       <width>301</width>
+       <width>191</width>
        <height>71</height>
       </rect>
      </property>
@@ -203,6 +203,11 @@
        <height>31</height>
       </rect>
      </property>
+     <property name="font">
+      <font>
+       <pointsize>13</pointsize>
+      </font>
+     </property>
     </widget>
     <widget class="QLineEdit" name="ageEdit">
      <property name="geometry">
@@ -213,20 +218,26 @@
        <height>31</height>
       </rect>
      </property>
+     <property name="font">
+      <font>
+       <pointsize>13</pointsize>
+      </font>
+     </property>
     </widget>
    </widget>
    <widget class="QWidget" name="chartWidget" native="true">
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>190</y>
-      <width>851</width>
-      <height>251</height>
+      <y>180</y>
+      <width>751</width>
+      <height>181</height>
      </rect>
     </property>
     <property name="font">
      <font>
       <family>微軟正黑體</family>
+      <pointsize>10</pointsize>
      </font>
     </property>
    </widget>
@@ -236,8 +247,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>870</width>
-     <height>21</height>
+     <width>774</width>
+     <height>18</height>
     </rect>
    </property>
   </widget>

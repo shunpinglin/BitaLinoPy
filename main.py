@@ -105,6 +105,6 @@ class Main(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     w = Main()
-    w.resize(1100, 700)
+    w.resize(800, 450)
     w.show()
     sys.exit(app.exec())
