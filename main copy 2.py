@@ -147,30 +147,8 @@ class Main(QtWidgets.QMainWindow):
         actStart = tb.addAction("開始")
         actStop = tb.addAction("停止")
         actDisconnect = tb.addAction("斷線")
-        tb.addSeparator()
 
-        # ▼ 濾波/Notch 教學用切換
-        self.actFilter = tb.addAction("濾波")
-        self.actFilter.setCheckable(True)
-        self.actFilter.setChecked(self.controller.filter_enabled)
-        self.actFilter.toggled.connect(self.controller.set_filter_enabled)
-
-        self.actNotch = tb.addAction("Notch 60Hz")
-        self.actNotch.setCheckable(True)
-        self.actNotch.setChecked(self.controller.notch_enabled)
-        self.actNotch.toggled.connect(self.controller.set_notch_enabled)
-
-        # 若目前的濾波器不支援 Notch（例如未安裝 SciPy、或 notch=0），就把按鈕關掉
-        supports_notch = (
-            getattr(self.controller, "ecg_filter", None) is not None and
-            hasattr(self.controller.ecg_filter, "set_notch_enabled") and
-            getattr(self.controller.ecg_filter, "sos_notch", None) is not None
-        )
-        if not supports_notch:
-            self.actNotch.setEnabled(False)
-
-        # 綁定前 4 個基本動作
-        # actConnect.triggered.connect(self.controller.connect_device)
+        # 綁定事件（「連線」用我們的自訂 slot，其他直接走 controller）
         actConnect.triggered.connect(self._on_connect_clicked)
         actStart.triggered.connect(self.controller.start_stream)
         actStop.triggered.connect(self.controller.stop_stream)
@@ -295,7 +273,6 @@ class Main(QtWidgets.QMainWindow):
             for p in list_ports.comports():
                 out.append((p.device, f"{p.device} – {p.description}"))
             # 依 COM 編號排序
-
             def _key(t):
                 name = t[0]
                 try:
@@ -422,6 +399,6 @@ class Main(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     w = Main()
-    w.resize(800, 500)
+    w.resize(1000, 600)
     w.show()
     sys.exit(app.exec())

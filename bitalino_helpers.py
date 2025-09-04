@@ -9,6 +9,7 @@ from typing import List, Optional, Callable
 import numpy as np
 from bitalino import BITalino
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("BitalinoClient")
 
 
@@ -30,11 +31,14 @@ def _find_ble_mac_by_name(name_keywords: List[str], timeout_s: int = 6) -> Optio
     """用名稱關鍵字掃 BLE，回傳第一個符合的 MAC；無 bleak 或找不到則回傳 None。"""
     if not _HAS_BLEAK:
         return None
-    devices = BleakScanner.discover(timeout=timeout_s)
-    for d in devices:
-        n = (d.name or "").lower()
-        if any(k.lower() in n for k in name_keywords):
-            return d.address
+    try:
+        devices = BleakScanner.discover(timeout=timeout_s)
+        for d in devices:
+            n = (d.name or "").lower()
+            if any(k.lower() in n for k in name_keywords):
+                return d.address
+    except Exception as e:
+        logger.warning(f"BLE 掃描失敗: {e}")
     return None
 
 
@@ -42,10 +46,13 @@ def _find_spp_port_by_hint(name_keywords: List[str]) -> Optional[str]:
     """掃描序列埠，依描述/名稱尋找 BITalino SPP 對應的 COMx；無 pyserial 或找不到則回傳 None。"""
     if not _HAS_PYSERIAL:
         return None
-    for p in list_ports.comports():
-        desc = f"{p.description} {p.name} {p.hwid}".lower()
-        if any(k.lower() in desc for k in name_keywords) or "bitalino" in desc:
-            return p.device  # e.g., 'COM7'
+    try:    
+        for p in list_ports.comports():
+            desc = f"{p.description} {p.name} {p.hwid}".lower()
+            if any(k.lower() in desc for k in name_keywords) or "bitalino" in desc:
+                return p.device  # e.g., 'COM7'
+    except Exception as e:
+        logger.warning(f"COM 端口掃描失敗: {e}")
     return None
 
 
@@ -77,6 +84,7 @@ def _auto_connect_bitalino(
                 return BITalino(mac)
 
             # 3) SPP 掃描找 COM Port
+            logger.info("[auto] 掃描 COM 端口...")
             com = _find_spp_port_by_hint(name_hints)
             if com:
                 logger.info(f"[auto] 以 SPP 找到 COM 連接埠：{com}")
@@ -86,10 +94,21 @@ def _auto_connect_bitalino(
         except Exception as e:
             last_err = e
             logger.warning(f"[auto] 第 {attempt}/{retries} 次連線失敗：{e}")
-            time.sleep(wait_s)
+            if attempt < retries:
+                time.sleep(wait_s)
 
     raise RuntimeError(f"BITalino 連線失敗（已重試 {retries} 次）：{last_err}")
 
+
+# ===== 小工具 =====
+class _safe_suppress:
+    """用法：with _safe_suppress(): ... —— 靜默忽略例外（logging.debug 紀錄即可）"""
+    def enter(self):
+        return self
+    def exit(self, exc_type, exc, tb):
+        if exc:
+            logger.debug(f"suppress: {exc}")
+        return True # 抑制例外
 
 class BitalinoClient:
     """
@@ -199,8 +218,10 @@ class BitalinoClient:
             logger.exception(f"擷取迴圈錯誤：{e}")
         finally:
             # 走到這裡代表要停；確保裝置停止
-            with _safe_suppress():
-                self.device.stop()  # type: ignore
+            try:
+                self.device.stop()
+            except Exception as e:
+                logger.debug(f"停止裝置時出錯: {e}")
             self.is_acquiring = False
             logger.info("擷取迴圈結束")
 
@@ -218,21 +239,33 @@ class BitalinoClient:
         """關閉連線（會先停止擷取）。"""
         try:
             self.stop_acquisition()
+        except Exception as e:
+            logger.debug(f"停止擷取時出錯: {e}")
         finally:
             if self.device:
-                with _safe_suppress():
+               try:
                     self.device.close()
-            self.device = None
+               except Exception as e:
+                    logger.debug(f"關閉裝置時出錯: {e}")
+               self.device = None
+
             self.is_connected = False
             logger.info("BITalino 連線已關閉")
 
+    def get_battery_level(self) -> Optional[int]:
+        """取得電池電量（mV）"""
+        if self.is_connected and self.device:
+            try:
+                return self.device.battery()
+            except Exception as e:
+                logger.error(f"取得電池電量失敗: {e}")
+        return None
 
-# ===== 小工具 =====
-class _safe_suppress:
-    """用法：with _safe_suppress():  ...  —— 靜默忽略例外（logging.debug 紀錄即可）"""
-    def __enter__(self):
-        return self
-    def __exit__(self, exc_type, exc, tb):
-        if exc:
-            logger.debug(f"suppress: {exc}")
-        return True  # 抑制例外
+    def get_version(self) -> Optional[str]:
+        """取得設備版本資訊"""
+        if self.is_connected and self.device:
+            try:
+                return self.device.version()
+            except Exception as e:
+                logger.error(f"取得版本資訊失敗: {e}")
+        return None

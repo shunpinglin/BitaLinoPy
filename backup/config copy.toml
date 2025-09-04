@@ -10,19 +10,15 @@ analog_channels = [1]           # 使用的類比通道索引（以 A1=0, A2=1, 
                                 # 例：ECG 接在 A2 → 設為 [1]；若同時讀多通道可設如 [1, 2]
 preferred_mac = ""              # （選用）BLE 自動連線時優先使用的 MAC（例："98:D3:31:xx:xx:xx"）
                                 # 留空表示不指定，會由自動掃描決定（需安裝 bleak）
-address = ""                  # （選用）有線/指定位址（如 COM port "COM5" 或特定藍牙位址）。通常留空即可
+# address = ""                    # （選用）有線/指定位址（如 COM port "COM5" 或特定藍牙位址）。通常留空即可
 # address = "COM16"             # CUST 8F 研究室 PC
-# address = "COM5"              # HOME Book Room PC
-# address = "COM9"              # Sports PC
+address = "COM5"                # HOME Book Room PC
 
 # ---------- 繪圖 / 展示 ----------
 [plot]
 seconds = 10                    # 畫面時間窗（秒），滑動顯示最近 N 秒資料
 chunk = 100                     # 單批讀取/處理樣本數（與裝置 read(chunk) 對應）。1000Hz 時 100=每 0.1 秒更新
 gain  = 1.5                     # 顯示增益（僅影響波形高低視覺，不改變數據值）
-ecg_col = -1
-mode    = "sweep"               # ← 這版預設就是 sweep；想看舊式滑動窗就改 "sliding"
-# direction = "rtl"             # 只有在 mode="sliding" 才會用到；sweep 一律左→右
 
 # ---------- 濾波（即時、串流友善） ----------
 [filter]
