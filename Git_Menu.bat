@@ -90,6 +90,7 @@ echo  6) Add and commit (git add . ; git commit)
 echo  7) Push to remote (git push)
 echo  77) Force Push to remote(OVERWRITE remote)
 echo  8) Pull from remote (git pull)
+echo  88) Pull Synchronous from remote (git pull)
 echo  9) Create and switch to new branch (git checkout -b)
 echo 10) Switch to existing branch (git checkout)
 echo 11) Merge into current branch (git merge)
@@ -113,6 +114,7 @@ if "%CHOICE%"=="6" goto ADD_COMMIT
 if "%CHOICE%"=="7" goto PUSH
 if "%CHOICE%"=="77" goto PUSH_FORCE
 if "%CHOICE%"=="8" goto PULL
+if "%CHOICE%"=="88" goto PULL_SYNC & goto :MAIN_MENU
 if "%CHOICE%"=="9" goto NEW_BRANCH
 if "%CHOICE%"=="10" goto SWITCH_BRANCH
 if "%CHOICE%"=="11" goto MERGE_BRANCH
@@ -370,6 +372,42 @@ if errorlevel 1 (
 )
 pause
 goto MAIN_MENU
+
+:PULL_SYNC
+echo.
+set "BRANCH="
+set /p "BRANCH=Enter branch name (default: current or main): "
+if "%BRANCH%"=="" (
+  for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "BRANCH=%%b"
+  if "%BRANCH%"=="" set "BRANCH=main"
+)
+echo Target branch: %BRANCH%
+
+call :ensure_origin || (
+  echo [ERROR] 遠端 origin 未設定
+  pause & goto :eof
+)
+
+echo 取得遠端更新…
+git fetch --all --prune || (echo [ERROR] fetch 失敗 & pause & goto :eof)
+
+rem 設定/修正追蹤分支
+call :set_tracking "%BRANCH%"
+
+echo 拉回（rebase + autostash）…
+git pull --rebase --autostash
+if errorlevel 1 (
+  echo [WARN] rebase 失敗，嘗試一般 pull…
+  git pull || (echo [ERROR] pull 仍失敗，請手動解衝突。 & pause & goto :eof)
+)
+
+git submodule update --init --recursive
+
+echo.
+echo ✅ 已同步 origin/%BRANCH%
+git --no-pager log -1 --oneline
+pause
+goto :eof
 
 :NEW_BRANCH
 echo.
