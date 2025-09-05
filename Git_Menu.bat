@@ -88,6 +88,7 @@ echo  4) Set or change remote "origin" / Remote URL
 echo  5) Show status (git status)
 echo  6) Add and commit (git add . ; git commit)
 echo  7) Push to remote (git push)
+echo  77) Force Push to remote(OVERWRITE remote)
 echo  8) Pull from remote (git pull)
 echo  9) Create and switch to new branch (git checkout -b)
 echo 10) Switch to existing branch (git checkout)
@@ -110,6 +111,7 @@ if "%CHOICE%"=="4" goto SET_REMOTE
 if "%CHOICE%"=="5" goto STATUS
 if "%CHOICE%"=="6" goto ADD_COMMIT
 if "%CHOICE%"=="7" goto PUSH
+if "%CHOICE%"=="77" goto PUSH_FORCE
 if "%CHOICE%"=="8" goto PULL
 if "%CHOICE%"=="9" goto NEW_BRANCH
 if "%CHOICE%"=="10" goto SWITCH_BRANCH
@@ -303,6 +305,55 @@ if errorlevel 1 (
 )
 pause
 goto MAIN_MENU
+
+:PUSH_FORCE
+echo.
+set "BRANCH="
+set /p "BRANCH=Enter branch name (default: current or main): "
+if "%BRANCH%"=="" (
+    for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "BRANCH=%%b"
+    if "%BRANCH%"=="" set "BRANCH=main"
+)
+echo Target branch: %BRANCH%
+
+:: 確保 origin 存在（沿用你的工具函式）
+call :ensure_origin || (
+  echo [ERROR] 遠端 origin 尚未設定且設定失敗
+  pause
+  goto MAIN_MENU
+)
+
+echo.
+echo ===== Force Push to origin/%BRANCH% (OVERWRITE) =====
+echo 這會覆蓋遠端歷史，請確認！
+set /p "CONF=Type YES to continue: "
+if /I not "%CONF%"=="YES" goto MAIN_MENU
+
+echo.
+echo Fetching origin (讓 --force-with-lease 有意義)...
+git fetch origin %BRANCH% --prune
+
+echo.
+echo Pushing with FORCE (with-lease)...
+:: 檢查「指定分支」是否已有上游追蹤
+git rev-parse --abbrev-ref --symbolic-full-name "%BRANCH%@{u}" >nul 2>nul
+if errorlevel 1 (
+  echo (首次推送：建立追蹤)
+  git push --force-with-lease -u origin "%BRANCH%"
+) else (
+  git push --force-with-lease origin "%BRANCH%"
+)
+
+if errorlevel 1 (
+  echo.
+  echo [ERROR] Force push 失敗。可能是分支受保護或權限不足。
+) else (
+  echo.
+  echo Force push 完成。
+)
+pause
+goto MAIN_MENU
+
 
 :PULL
 echo.
