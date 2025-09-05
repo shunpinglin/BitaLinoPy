@@ -67,6 +67,9 @@ class Main(QtWidgets.QMainWindow):
         else:
             try:
                 cfg = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+                # ➜ 設定 MainWindow 標題（由 config.toml 控制；沒有就用預設）
+                title = cfg.get("ui", {}).get("window_title", "ECG App")
+                self.setWindowTitle(title)
             except tomllib.TOMLDecodeError as e:
                 QtWidgets.QMessageBox.critical(
                     self, "設定檔格式錯誤",

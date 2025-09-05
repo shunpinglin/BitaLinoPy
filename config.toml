@@ -23,6 +23,7 @@ gain  = 1.5                     # 顯示增益（僅影響波形高低視覺，�
 ecg_col = -1
 mode    = "sweep"               # ← 這版預設就是 sweep；想看舊式滑動窗就改 "sliding"
 # direction = "rtl"             # 只有在 mode="sliding" 才會用到；sweep 一律左→右
+y_padding = 0.25                # 建議值：0.15~0.35；數值越大，上下留白越多。
 
 # ---------- 濾波（即時、串流友善） ----------
 [filter]
@@ -48,6 +49,9 @@ critical_pct = 10      # 極低門檻（狀態列紅色與提示）
 raw_min = 511          # 低電（約 0~1%）
 raw_max = 645          # 滿電（約 99%）
 set_device_threshold_pct = 10   # 告知板子在 ~10% 時點紅燈（可選）
+
+[ui]
+window_title = "ECG 訊號擷取、濾波、演算與應用教學系統（教學版）"
 
 # ====== 教學備註 ======
 # 1) 若未安裝 scipy，程式會自動改用內建「簡化濾波」（仍可即時運作）。
