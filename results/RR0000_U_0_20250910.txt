@@ -1,0 +1,140 @@
+# FORMAT: RR intervals (ms), one per line
+# SUBJECT_ID: RR0000
+# Name: 
+# AGE: 0
+# SEX: U
+# DEVICE: BITalino (r)evolution; fs=1000 Hz; channel=A1
+# LEAD: Lead II
+# START_TIME: 2025-09-10T09:22:18+08:00
+# DURATION_S: 104.5
+# RR_COUNT: 122
+# UNITS: ms
+# DATA_STATUS: raw-detected (no ectopic removal)
+# FILTER: bandpass 0.67–30.0 Hz; notch 60 Hz=OFF
+# DETECTOR: EMA_env=100ms; search=±60ms; refractory=240ms; min_env=0.0; min_peak=0.0
+# CLEANING: outliers <300 or >2000 ms removed=NO
+# METRICS: meanRR=847.0 ms; meanHR=70.8 bpm; SDNN=63.0 ms; RMSSD=64.5 ms
+# POSTURE: 
+# NOTES: 
+449
+704
+310
+834
+878
+856
+856
+856
+854
+858
+842
+870
+856
+856
+856
+856
+856
+850
+862
+856
+856
+856
+856
+856
+856
+856
+846
+866
+856
+856
+856
+856
+856
+854
+858
+842
+870
+856
+856
+856
+856
+856
+850
+862
+856
+856
+856
+856
+856
+856
+856
+846
+866
+856
+857
+855
+857
+856
+853
+858
+856
+856
+856
+857
+856
+855
+857
+849
+863
+855
+856
+857
+856
+856
+856
+856
+845
+867
+856
+856
+856
+856
+856
+853
+859
+856
+856
+856
+856
+856
+856
+856
+849
+863
+856
+856
+856
+856
+856
+856
+856
+845
+867
+856
+856
+856
+856
+856
+853
+859
+856
+856
+856
+856
+856
+856
+856
+849
+863
+856
+856
+856

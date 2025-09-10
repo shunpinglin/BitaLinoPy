@@ -2,6 +2,8 @@
 # 用於與 BITalino 設備互動的輔助類別與函式（含自動連線：BLE/COM）
 # 需求：pip install bitalino bleak pyserial
 
+from __future__ import annotations
+
 import time
 import logging
 import threading
@@ -12,44 +14,62 @@ from bitalino import BITalino
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("BitalinoClient")
 
-
 # ===== 選配：BLE 與 SPP 掃描能力 =====
 try:
     from bleak import BleakScanner
     _HAS_BLEAK = True
-except ImportError:
+except Exception:
     _HAS_BLEAK = False
 
 try:
     from serial.tools import list_ports
     _HAS_PYSERIAL = True
-except ImportError:
+except Exception:
     _HAS_PYSERIAL = False
+    list_ports = None
 
 
 def _find_ble_mac_by_name(name_keywords: List[str], timeout_s: int = 6) -> Optional[str]:
-    """用名稱關鍵字掃 BLE，回傳第一個符合的 MAC；無 bleak 或找不到則回傳 None。"""
     if not _HAS_BLEAK:
         return None
+    # 把 BLE 掃描包裝成同步，避免 event loop 衝突
+    import asyncio
     try:
-        devices = BleakScanner.discover(timeout=timeout_s)
-        for d in devices:
-            n = (d.name or "").lower()
-            if any(k.lower() in n for k in name_keywords):
-                return d.address
-    except Exception as e:
-        logger.warning(f"BLE 掃描失敗: {e}")
+        return asyncio.run(_ble_scan_pick(name_keywords, timeout_s))
+    except RuntimeError:
+        # 若已有 running loop，換到背景執行緒
+        out = {}
+        def _worker():
+            try:
+                out["mac"] = asyncio.run(_ble_scan_pick(name_keywords, timeout_s))
+            except Exception as e:
+                out["err"] = e
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        t.join(timeout_s + 3)
+        return out.get("mac")
+
+async def _ble_scan_pick(name_keywords: List[str], timeout_s: int) -> Optional[str]:
+    devs = await BleakScanner.discover(timeout=timeout_s)
+    for d in devs:
+        n = (getattr(d, "name", "") or "").lower()
+        if any(k.lower() in n for k in name_keywords) or "bitalino" in n:
+            return d.address
     return None
 
 
 def _find_spp_port_by_hint(name_keywords: List[str]) -> Optional[str]:
-    """掃描序列埠，依描述/名稱尋找 BITalino SPP 對應的 COMx；無 pyserial 或找不到則回傳 None。"""
-    if not _HAS_PYSERIAL:
+    if not _HAS_PYSERIAL or not list_ports:
         return None
-    try:    
+    try:
         for p in list_ports.comports():
             desc = f"{p.description} {p.name} {p.hwid}".lower()
-            if any(k.lower() in desc for k in name_keywords) or "bitalino" in desc:
+            looks_like = (
+                "bitalino" in desc or
+                "standard serial over bluetooth" in desc or
+                any(k.lower() in desc for k in name_keywords)
+            )
+            if looks_like:
                 return p.device  # e.g., 'COM7'
     except Exception as e:
         logger.warning(f"COM 端口掃描失敗: {e}")
@@ -63,7 +83,7 @@ def _auto_connect_bitalino(
     wait_s: float = 1.5,
 ) -> BITalino:
     """
-    自動連線流程（優先：BLE by MAC/地址 → BLE 掃描 by 名稱 → SPP/COM 掃描）。
+    自動連線流程（優先：SPP/COM → BLE by MAC/名稱）。
     回傳已連線的 BITalino 物件；失敗會拋出例外。
     """
     if name_hints is None:
@@ -72,23 +92,22 @@ def _auto_connect_bitalino(
     last_err = None
     for attempt in range(1, retries + 1):
         try:
-            # 1) 指定地址：可能是 BLE MAC（XX:XX:...）或 Windows 的 'COMx'
+            # 0) 指定地址（可為 COMx 或 BLE MAC）
             if preferred_addr:
                 logger.info(f"[auto] 嘗試以指定地址連線：{preferred_addr}")
                 return BITalino(preferred_addr)
 
-            # 2) BLE 掃描找名稱
-            mac = _find_ble_mac_by_name(name_hints, timeout_s=6)
-            if mac:
-                logger.info(f"[auto] 以 BLE 找到裝置 MAC：{mac}")
-                return BITalino(mac)
-
-            # 3) SPP 掃描找 COM Port
-            logger.info("[auto] 掃描 COM 端口...")
+            # 1) 先找 SPP/COM（Windows 常見）
             com = _find_spp_port_by_hint(name_hints)
             if com:
                 logger.info(f"[auto] 以 SPP 找到 COM 連接埠：{com}")
                 return BITalino(com)
+
+            # 2) 再找 BLE 名稱
+            mac = _find_ble_mac_by_name(name_hints, timeout_s=6)
+            if mac:
+                logger.info(f"[auto] 以 BLE 找到裝置 MAC：{mac}")
+                return BITalino(mac)
 
             raise RuntimeError("找不到可用的 BITalino (BLE 或 SPP)")
         except Exception as e:
@@ -100,25 +119,19 @@ def _auto_connect_bitalino(
     raise RuntimeError(f"BITalino 連線失敗（已重試 {retries} 次）：{last_err}")
 
 
-# ===== 小工具 =====
-class _safe_suppress:
-    """用法：with _safe_suppress(): ... —— 靜默忽略例外（logging.debug 紀錄即可）"""
-    def enter(self):
-        return self
-    def exit(self, exc_type, exc, tb):
-        if exc:
-            logger.debug(f"suppress: {exc}")
-        return True # 抑制例外
-
 class BitalinoClient:
     """
     高階 BITalino 客戶端：
       - 支援 BLE MAC / 名稱掃描 / SPP COM 掃描 自動連線
-      - 背景執行緒連續讀取，透過 callback 丟出資料（numpy ndarray）
+      - 背景執行緒連續讀取，透過 callback 丟出資料（numpy.ndarray）
+      - on_error: Optional[(Exception)->None]，出錯回呼
     """
 
+    # 提供 on_error 屬性，方便 UI（ECGController）註冊
+    on_error: Optional[Callable[[Exception], None]] = None
+
     def __init__(self):
-        self.address: Optional[str] = None          # 可填 MAC 或 'COMx'；不填則自動掃描
+        self.address: Optional[str] = None
         self.name_hints: List[str] = ["BITalino", "bitalino", "plux"]
 
         self.sampling_rate: int = 1000
@@ -133,30 +146,27 @@ class BitalinoClient:
 
         self.acquisition_thread: Optional[threading.Thread] = None
         self._stop_evt = threading.Event()
-        self._chunk_size = 100  # 每次 read 的筆數（你可以視需要調整）
+        self._chunk_size = 100
 
     # ---------- 設定與連線 ----------
-
     def configure(
         self,
         address: Optional[str] = None,
         sampling_rate: int = 1000,
-        analog_channels: List[int] = None,
+        analog_channels: Optional[List[int]] = None,
         name_hints: Optional[List[str]] = None,
     ):
-        """
-        設定裝置參數。
-        address: 可為 BLE MAC（'XX:XX:...'}）或 'COMx'；None 代表交給自動掃描
-        """
         self.address = address
-        self.sampling_rate = sampling_rate
+        self.sampling_rate = int(sampling_rate)
         if analog_channels is not None:
-            self.analog_channels = list(analog_channels)
+            # 轉成乾淨的 0..5 整數清單
+            self.analog_channels = [int(c) for c in analog_channels if 0 <= int(c) <= 5]
+            if not self.analog_channels:
+                self.analog_channels = [1]
         if name_hints:
             self.name_hints = list(name_hints)
 
     def connect(self, retries: int = 3) -> None:
-        """建立連線（自動 BLE/COM 掃描）。"""
         if self.is_connected and self.device:
             logger.info("已連線，略過 connect()")
             return
@@ -173,11 +183,8 @@ class BitalinoClient:
         logger.info("BITalino 連線成功")
 
     # ---------- 資料擷取 ----------
-
+    
     def start_acquisition(self, chunk_size: int = 100) -> None:
-        """
-        開始擷取資料；資料會在背景執行緒連續 read()，並呼叫 data_callback。
-        """
         if not self.is_connected or not self.device:
             raise RuntimeError("尚未連線，請先呼叫 connect()")
 
@@ -185,39 +192,89 @@ class BitalinoClient:
             logger.info("擷取已經啟動中，略過 start_acquisition()")
             return
 
+        fs = int(self.sampling_rate)
+        if fs not in (1, 10, 100, 1000):
+            raise ValueError(f"取樣率不支援：{fs}（合法值：1/10/100/1000）")
+
+        chans = [int(c) for c in self.analog_channels] or [1]
         self._chunk_size = int(chunk_size) if chunk_size > 0 else 100
-        logger.info(f"開始擷取：fs={self.sampling_rate}, ch={self.analog_channels}, chunk={self._chunk_size}")
+        logger.info(f"開始擷取：fs={fs}, ch={chans}, chunk={self._chunk_size}")
 
-        # 啟動裝置與背景執行緒
-        self.device.start(self.sampling_rate, self.analog_channels)
         self._stop_evt.clear()
-        self.is_acquiring = True
+        try:
+            self.device.start(fs, chans)
+        except Exception as e:
+            logger.exception(f"device.start() 失敗：{e}")
+            if hasattr(self, "on_error") and self.on_error:
+                try: self.on_error(e)
+                except Exception: pass
+            raise
 
+        self.is_acquiring = True
         self.acquisition_thread = threading.Thread(
             target=self._acquisition_loop, name="BitalinoAcq", daemon=True
         )
         self.acquisition_thread.start()
 
+
     def _acquisition_loop(self):
-        """背景擷取迴圈；將資料轉成 numpy.ndarray 傳給 callback。"""
         assert self.device is not None
+        t0 = time.time()
+        pushed = 0
+        first_shape_logged = False
         try:
             while not self._stop_evt.is_set():
-                # bitalino.read(n) 回傳 shape 約為 (n, 6+) 的列表/ndarray（依韌體/通道而異）
-                raw = self.device.read(self._chunk_size)
-                data = np.array(raw)  # 轉成 ndarray，方便後處理/繪圖
+                try:
+                    raw = self.device.read(self._chunk_size)
+                except Exception as e:
+                    logger.exception(f"read() 發生例外：{e}")
+                    if hasattr(self, "on_error") and self.on_error:
+                        try: self.on_error(e)
+                        except Exception: pass
+                    break
 
-                # 丟給 callback（若有）
+                if raw is None:
+                    time.sleep(0.002)
+                    continue
+
+                # 重要：確保是 2D，避免 1D 或 object array 造成後續丟資料
+                data = np.atleast_2d(np.asarray(raw))
+                if data.size == 0:
+                    time.sleep(0.002)
+                    continue
+
+                n_samp = int(data.shape[0])
+                pushed += n_samp
+
+                if not first_shape_logged:
+                    logger.info(f"[acq] 第一包資料 shape={data.shape}, dtype={data.dtype}")
+                    first_shape_logged = True
+
+                # 丟給上層（有錯會記 log 並繼續 loop）
                 if self.data_callback:
                     try:
                         self.data_callback(data)
                     except Exception as cb_err:
                         logger.exception(f"data_callback 發生例外：{cb_err}")
+                        if hasattr(self, "on_error") and self.on_error:
+                            try: self.on_error(cb_err)
+                            except Exception: pass
+                        time.sleep(0.002)
+
+                # 每秒打一個心跳，觀察是否真的有資料
+                if time.time() - t0 > 1.0:
+                    logger.info(f"[acq] 已送出樣本數（過去 1s）：~{pushed}")
+                    pushed = 0
+                    t0 = time.time()
+
+                time.sleep(0.0005)
 
         except Exception as e:
             logger.exception(f"擷取迴圈錯誤：{e}")
+            if hasattr(self, "on_error") and self.on_error:
+                try: self.on_error(e)
+                except Exception: pass
         finally:
-            # 走到這裡代表要停；確保裝置停止
             try:
                 self.device.stop()
             except Exception as e:
@@ -225,35 +282,34 @@ class BitalinoClient:
             self.is_acquiring = False
             logger.info("擷取迴圈結束")
 
+
+
     def stop_acquisition(self) -> None:
-        """停止擷取資料與背景執行緒。"""
         if not self.is_acquiring:
             return
         self._stop_evt.set()
         if self.acquisition_thread and self.acquisition_thread.is_alive():
             self.acquisition_thread.join(timeout=3.0)
-        # device.stop() 已在 loop 的 finally 內保險呼叫
         self.is_acquiring = False
 
     def close(self) -> None:
-        """關閉連線（會先停止擷取）。"""
+        """關閉連線（會先停止擷取）；不會在迴圈內自動呼叫。"""
         try:
             self.stop_acquisition()
         except Exception as e:
             logger.debug(f"停止擷取時出錯: {e}")
         finally:
             if self.device:
-               try:
+                try:
                     self.device.close()
-               except Exception as e:
+                except Exception as e:
                     logger.debug(f"關閉裝置時出錯: {e}")
-               self.device = None
-
+                self.device = None
             self.is_connected = False
             logger.info("BITalino 連線已關閉")
 
+    # 選配：設備資訊
     def get_battery_level(self) -> Optional[int]:
-        """取得電池電量（mV）"""
         if self.is_connected and self.device:
             try:
                 return self.device.battery()
@@ -262,7 +318,6 @@ class BitalinoClient:
         return None
 
     def get_version(self) -> Optional[str]:
-        """取得設備版本資訊"""
         if self.is_connected and self.device:
             try:
                 return self.device.version()

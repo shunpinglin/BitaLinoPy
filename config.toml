@@ -20,7 +20,7 @@ address = ""                  # （選用）有線/指定位址（如 COM port "
 seconds = 10                    # 畫面時間窗（秒），滑動顯示最近 N 秒資料
 chunk = 100                     # 單批讀取/處理樣本數（與裝置 read(chunk) 對應）。1000Hz 時 100=每 0.1 秒更新
 gain  = 1.5                     # 顯示增益（僅影響波形高低視覺，不改變數據值）
-ecg_col = -1
+ecg_col = -1                    # 接收數據欄位 
 mode    = "sweep"               # ← 這版預設就是 sweep；想看舊式滑動窗就改 "sliding"
 # direction = "rtl"             # 只有在 mode="sliding" 才會用到；sweep 一律左→右
 y_padding = 0.25                # 建議值：0.15~0.35；數值越大，上下留白越多。
@@ -34,10 +34,54 @@ order = 4                       # Butterworth 階數（2~4 常見；更陡可 6�
 q = 30.0                        # 陷波 Q 值（20~50 常用；數值越大帶寬越窄）
 
 
+[detector]        # 用于可视化
+slope_k = 4.0
+pre_lock_ms = 8.0
+post_lock_ms = 70.0
+tail_ms = 200.0
+amp_abs_gate = 250.0
+k_mad_height = 2.8
+env_ms = 100                # 120 80 100–120 ms：QRS 能量包絡的平滑常數
+search_ms = 60              # 在能量峰附近 ±60–80 ms 搜 R apex
+refractory_ms = 240         # 不應期
+vis_lag_ms = 0              # 紅點視覺補償，可設 -10 ~ -20 向左微調，向左提前0~20 作細微補償（正值=向右一點）
+                            # search_half 從 6 調到 8 也可以（在 _prune_rwin_and_update_scatter 裡）
+min_env = 0.0      # 先關掉；若雜訊多再慢慢加
+min_peak = 0.0     # 同上
+
+
+[detector_rr]
+slope_k = 2.8
+k_mad_height = 2.0
+amp_abs_gate = 100.0
+refractory_ms = 250.0
+pre_lock_ms = 15.0
+post_lock_ms = 100.0
+tail_ms = 300.0
+
+# （選擇）紅點顯示獨立參數
+[detector_vis]
+refractory_ms = 240
+slope_k       = 4.0
+k_mad_height  = 2.8
+amp_abs_gate  = 250
+vis_lag_ms    = 0
+
 [subject_defaults]
-name = "林測試"
-age  = 62
-sex  = "男"   # 可填 "男" 或 "女"
+# 可選：提供起始號碼的「種子」，例如希望從 RR0200 開始
+seed_counter = 8000          # 選填；只會在 .subject_last_id.txt 不存在時生效
+id = "AUTO"
+name = ""
+age  = 0
+sex  = "U"   # 可填 "M" 或 "F"
+lead = "Lead II (R-arm +, L-arm -, right leg ref.)"
+posture = "Quiet Sitting"
+notes = ""
+
+[rr]
+warmup_sec    = 30.0        # 暖機秒數
+warmup_beats  = 30          # 暖機 RR 筆數
+warmup_either = true        # true=擇一達成；false=兩者都達成才開始收錄
 
 [battery]
 enable = true          # 顯示電量監測

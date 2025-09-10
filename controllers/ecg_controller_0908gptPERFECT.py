@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from collections import deque
 import time, math
-from datetime import datetime
 
 import numpy as np
 import pyqtgraph as pg
@@ -471,19 +470,6 @@ class ECGController:
             search_ms=float(det_cfg.get("search_ms", 80.0)),
             refractory_ms=float(det_cfg.get("refractory_ms", 240.0))
         )
-        
-        # --- RR 暖機（避免前段不穩定進入 HRV/存檔） ---
-        rr_cfg = cfg.get("rr", {})
-        self.rr_warmup_sec = float(rr_cfg.get("warmup_sec", 30.0))   # 30 秒
-        self.rr_warmup_beats = int(rr_cfg.get("warmup_beats", 30))   # 30 筆 RR
-        # True=擇一達成開始收錄；False=兩者都達成才收錄
-        self.rr_warmup_either = bool(rr_cfg.get("warmup_either", True))
-
-        # 所有 RR（用來算即時 HR）；與「暖機後 RR」（用於存檔/HRV）
-        self._rr_accum: List[float] = []   # 全部
-        self._rr_store: List[float] = []   # 暖機後
-        self._rr_beats_total = 0           # 到目前為止已收到多少筆 RR（全部）
-
 
         # 視覺 R-peak 延遲（僅影響紅點）
         default_vis_ms = float(det_cfg.get("vis_lag_ms", 0.0))
@@ -502,39 +488,6 @@ class ECGController:
         self.btn_analyze.clicked.connect(self._on_analyze_clicked)
         self._set_hr("--", "--")
         self._set_rr_count(0)
-        
-        # --- 結果目錄（\results），若無就建立 ---                
-        try:
-            self.project_root = Path(__file__).resolve().parent.parent
-        except Exception:
-            self.project_root = Path.cwd()
-        self.results_dir = (self.project_root / "results")
-        self.results_dir.mkdir(parents=True, exist_ok=True)
-
-        # --- 受試者基本資料（先預設，稍後會從 UI 覆寫） ---
-        subj = cfg.get("subject", {})
-        self.subject_id   = str(subj.get("id", "RR0000"))   # "RR0000" 代表尚未指派 → 存檔時自動累加
-        self.subject_name = str(subj.get("name", ""))
-        try:
-            self.subject_age  = int(subj.get("age", 0))
-        except Exception:
-            self.subject_age  = 0
-        self.subject_sex  = str(subj.get("sex", "U")).upper()  # M/F/U
-
-        # 額外備註欄（可在 cfg 設定）
-        self.lead    = str(cfg.get("lead", "Lead II"))
-        self.posture = str(cfg.get("posture", ""))
-        self.notes   = str(cfg.get("notes", ""))
-
-        # 錄製開始時間（存檔會用）
-        self._session_start_iso = None
-        self._session_start_t0  = None
-
-        # UI 綁定點（稍後用 bind_subject_inputs 接上）
-        self._name_edit = None
-        self._age_edit  = None
-        self._sex_m     = None
-        self._sex_f     = None
 
         # 電池
         b_cfg = cfg.get("battery", {})
@@ -683,8 +636,6 @@ class ECGController:
 
             # 清 RR/HR 與畫面
             self._rr_accum.clear()
-            self._rr_store.clear()
-            self._rr_beats_total = 0
             self.hr_stable = None
             self._set_hr("--", "--")
             self._set_rr_count(0)
@@ -699,11 +650,6 @@ class ECGController:
             self._rwin.clear()
             self.scatter.setData([], [])
             self._apply_direction()
-            
-            # 紀錄錄製開始時間（檔頭 START_TIME / DURATION 用）
-            self._session_start_t0  = time.time()            
-            self._session_start_iso = datetime.now().astimezone().isoformat(timespec='seconds')
-
 
             chunk = max(10, min(self.buf_len // 2, int(self.chunk)))
             self.client.start_acquisition(chunk_size=chunk)
@@ -797,78 +743,6 @@ class ECGController:
         except Exception as e:
             self.status_bar.showMessage(f"續傳失敗：{e}", 5000)
             return False
-        
-    # 由 Main 呼叫，把 UI 的 nameEdit/ageEdit/性別 radio 綁進來
-    def bind_subject_inputs(self, name_edit, age_edit, sex_m_radio, sex_f_radio):
-        self._name_edit = name_edit
-        self._age_edit  = age_edit
-        self._sex_m     = sex_m_radio
-        self._sex_f     = sex_f_radio
-        
-    def _warmup_over(self) -> bool:
-        # 以啟動時計時；若無則視為已過暖機（保險）
-        if getattr(self, "_session_start_t0", None) is None:
-            return True
-        elapsed = time.time() - float(self._session_start_t0)
-        cond_sec   = (elapsed >= self.rr_warmup_sec)
-        cond_beats = (self._rr_beats_total >= self.rr_warmup_beats)
-        return (cond_sec or cond_beats) if self.rr_warmup_either else (cond_sec and cond_beats)
-
-
-    # 讀 UI 值（有填就覆寫內部欄位）
-    def _read_subject_from_ui(self):
-        try:
-            if self._name_edit is not None:
-                t = self._name_edit.text().strip()
-                if t:
-                    self.subject_name = t
-            if self._age_edit is not None:
-                a = self._age_edit.text().strip()
-                if a.isdigit():
-                    age = int(a)
-                    # 視需求可夾限，例如 6~120：
-                    if 0 <= age <= 150:
-                        self.subject_age = age
-            if self._sex_m is not None and self._sex_m.isChecked():
-                self.subject_sex = "M"
-            elif self._sex_f is not None and self._sex_f.isChecked():
-                self.subject_sex = "F"
-        except Exception:
-            pass
-        
-    def _generate_next_subject_id(self) -> str:
-        counter_file = self.results_dir / ".subject_last_id.txt"
-
-        def scan_existing_max() -> int:
-            mx = 0
-            try:
-                for p in self.results_dir.glob("RR[0-9][0-9][0-9][0-9]_*.txt"):
-                    s = p.name[2:6]  # 4 位數
-                    if s.isdigit():
-                        mx = max(mx, int(s))
-            except Exception:
-                pass
-            return mx
-
-        last = 0
-        if counter_file.exists():
-            try:
-                last = int(counter_file.read_text(encoding="utf-8").strip() or "0")
-            except Exception:
-                last = 0
-
-        if last == 0:
-            last = scan_existing_max()
-
-        next_id_num = last + 1
-        try:
-            counter_file.write_text(str(next_id_num), encoding="utf-8")
-        except Exception:
-            pass
-
-        return f"RR{next_id_num:04d}"
-
-
 
     # ── 主執行緒：接資料 → 濾波/偵測/繪圖 ─────────────────────────
     def _on_arrived_mainthread(self, arr_obj: object):
@@ -922,27 +796,15 @@ class ECGController:
 
         # RR/HR：完全以 RR 引擎的次取樣結果為準
         if rr_new:
-            # 1) 全部 RR：用來顯示即時 HR，不過濾
-            for rr in rr_new:
-                self._rr_accum.append(rr)
-                self._rr_beats_total += 1  # 供暖機判斷
-
-                # 2) 暖機後 RR：用於存檔與 HRV 分析
-                if self._warmup_over():
-                    self._rr_store.append(rr)
-
-            # 3) 即時 HR 用全部 RR 的尾端；顯示的 RR 計數用「暖機後 RR」
+            self._rr_accum.extend(rr_new)
             rr_tail = np.asarray(self._rr_accum[-5:], dtype=float)
-            if rr_tail.size:
-                hr_inst = 60_000.0 / float(rr_tail.mean())
-                if self.hr_stable is None:
-                    self.hr_stable = hr_inst
-                else:
-                    self.hr_stable = (1 - self.alpha) * self.hr_stable + self.alpha * hr_inst
-                self._set_hr(f"{hr_inst:.0f}", f"{self.hr_stable:.0f}")
-
-            # 顯示「已可用（暖機後）」的 RR 計數
-            self._set_rr_count(len(self._rr_store))
+            hr_inst = 60_000.0 / float(rr_tail.mean())
+            if self.hr_stable is None:
+                self.hr_stable = hr_inst
+            else:
+                self.hr_stable = (1 - self.alpha) * self.hr_stable + self.alpha * hr_inst
+            self._set_hr(f"{hr_inst:.0f}", f"{self.hr_stable:.0f}")
+            self._set_rr_count(len(self._rr_accum))
 
     # ── 掃描式 ──────────────────────────────────────────────────
     def _plot_sweep(self, y: np.ndarray):
@@ -986,48 +848,17 @@ class ECGController:
          
     # ── RR 存檔 / HRV（時域） ───────────────────────────────────
     def _on_save_rr_clicked(self):
-        if len(self._rr_store) == 0:
+        if len(self._rr_accum) == 0:
             QMessageBox.information(None, "儲存 RR", "目前沒有可儲存的 RR。")
             return
-
-        # 先從 UI 抓姓名/年齡/性別
-        self._read_subject_from_ui()
-
-        # 自動產生 Subject ID（當前為空、RR0000 或 AUTO 才自動）
-        if (not self.subject_id) or (self.subject_id.upper() in ("RR0000", "AUTO")):
-            self.subject_id = self._generate_next_subject_id()
-
-        # 檔名：SUBJECT_ID_SEX_AGE_YYYYMMDD.txt
-        date_str = datetime.now().strftime("%Y%m%d")
-        sex_tag  = (self.subject_sex or "U").upper()
-        age_tag  = str(self.subject_age) if self.subject_age else "0"
-        fname    = f"{self.subject_id}_{sex_tag}_{age_tag}_{date_str}.txt"
-        default_path = (self.results_dir / fname).resolve()
-
-        # 儲存對話框（預設指到 \results）
-        fn, _ = QFileDialog.getSaveFileName(
-            None, "儲存 RR", str(default_path), "Text Files (*.txt)"
-        )
-        if not fn:
-            return
-
-        # 檔頭 + 整數毫秒 RR
-        header   = self._compose_rr_header(self._rr_store)  # 你已有的函式
-        rr_lines = "\n".join(str(int(round(v))) for v in self._rr_store)
-
-        out_path = Path(fn)
-        try:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass
-
-        out_path.write_text(header + rr_lines + "\n", encoding="utf-8")
-        QMessageBox.information(None, "儲存 RR", f"已儲存：{out_path}")
-
-
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        fn, _ = QFileDialog.getSaveFileName(None, "儲存 RR", f"RR{ts}.txt", "Text Files (*.txt)")
+        if not fn: return
+        Path(fn).write_text("\n".join(f"{v:.3f}" for v in self._rr_accum), encoding="utf-8")
+        QMessageBox.information(None, "儲存 RR", f"已儲存：{fn}")
 
     def _on_analyze_clicked(self):
-        res = compute_time_domain(self._rr_store)
+        res = compute_time_domain(self._rr_accum)
         if res is None:
             QMessageBox.information(None, "HRV 分析", "RR 數量不足，請先擷取 RR。")
             return
@@ -1037,140 +868,6 @@ class ECGController:
                f"RMSSD：{res.rmssd:.1f} ms\n"
                f"Mean HR：{res.mean_hr:.1f} bpm\n")
         QMessageBox.information(None, "HRV（時域）", msg)
-        
-    def _compose_rr_header(self, rr_ms: List[float]) -> str:
-        """
-        產生 RR 檔頭（不含資料本體）。安全地從 self 取用屬性，缺值時用合理預設。
-        會輸出：
-        - File Name: SUBJECT_SEX_AGE_YYYYMMDD.txt（僅寫在檔頭，實際檔名由呼叫端決定）
-        - 濾波/偵測器參數（從目前狀態反推）
-        - 暖機規則（若有設定 rr_warmup_*）
-        - 基本 HRV 時域統計（針對傳入的 rr_ms 計算）
-        """
-        import math, time, numpy as np
-        from datetime import datetime
-
-        # ---------- 基本統計（針對傳入 rr_ms） ----------
-        rr = np.asarray(rr_ms, dtype=float)
-        n = rr.size
-        mean_rr = float(rr.mean()) if n else 0.0
-        sdnn    = float(rr.std(ddof=1)) if n > 1 else 0.0
-        diffs   = np.diff(rr)
-        rmssd   = float(np.sqrt(np.mean(diffs * diffs))) if diffs.size else 0.0
-        mean_hr = 60000.0 / mean_rr if mean_rr > 0 else 0.0
-
-        # ---------- 錄製時長 ----------
-        dur_s = 0.0
-        t0 = getattr(self, "_session_start_t0", None)
-        if t0 is not None:
-            try:
-                dur_s = max(0.0, time.time() - float(t0))
-            except Exception:
-                dur_s = 0.0
-
-        # ---------- 受試者資料 ----------
-        subject_id   = getattr(self, "subject_id", "RR0000")
-        subject_name = getattr(self, "subject_name", "")
-        subject_age  = getattr(self, "subject_age", "")
-        subject_sex  = getattr(self, "subject_sex", "U")  # M/F/U
-        lead         = getattr(self, "lead", "")
-        posture      = getattr(self, "posture", "")
-        notes        = getattr(self, "notes", "")
-
-        # ---------- 檔名（寫在檔頭第一行供追溯） ----------
-        today = time.strftime("%Y%m%d")
-        safe_age = subject_age if str(subject_age) != "" else "-"
-        safe_sex = subject_sex if subject_sex in ("M", "F") else "U"
-        file_name_line = f"# File Name: {subject_id}_{safe_sex}_{safe_age}_{today}.txt"
-
-        # ---------- 開始時間（ISO） ----------
-        start_iso = getattr(self, "_session_start_iso", "")
-        if not start_iso and t0 is not None:
-            try:
-                # 盡量保留當地時區資訊（若有）
-                start_iso = datetime.fromtimestamp(float(t0)).isoformat()
-            except Exception:
-                start_iso = ""
-
-        # ---------- 濾波資訊 ----------
-        fs = int(getattr(self, "fs", 1000))
-        ecg_col = getattr(self, "ecg_col", -1)
-        try:
-            chan_txt = f"A{1 if ecg_col in (-1, None) else int(ecg_col) + 1}"
-        except Exception:
-            chan_txt = "A1"
-
-        notch_on = "ON" if getattr(self, "notch_enabled", False) else "OFF"
-        if getattr(self, "ecg_filter", None) is None:
-            filt_str = f"none; notch 60 Hz={notch_on}"
-        else:
-            if '_HAS_ECGFILTER' in globals() and _HAS_ECGFILTER:
-                # 嘗試讀取 ECGFilterRT 的 band
-                try:
-                    band = tuple(getattr(self.ecg_filter, "band", (0.5, 25.0)))
-                    filt_str = f"bandpass {band[0]:.1f}–{band[1]:.1f} Hz; notch 60 Hz={notch_on}"
-                except Exception:
-                    filt_str = f"bandpass 0.5–25.0 Hz; notch 60 Hz={notch_on}"
-            else:
-                filt_str = f"bandpass 0.67–30.0 Hz; notch 60 Hz={notch_on}"
-
-        # ---------- 偵測器資訊（從 rr_engine 反推） ----------
-        det = getattr(self, "rr_engine", None)
-        if det is not None:
-            # alpha = exp(-1/(fs*tau)) → tau(ms) = -1000/(fs*ln(alpha))
-            try:
-                alpha = float(getattr(det, "alpha", 0.0))
-                env_ms = int(round(-1000.0 / (fs * math.log(alpha)))) if 0.0 < alpha < 1.0 else 0
-            except Exception:
-                env_ms = 0
-            search_ms     = int(round(getattr(det, "search", 0) * 1000.0 / fs))
-            refractory_ms = int(round(getattr(det, "refractory", 0) * 1000.0 / fs))
-            min_env  = float(getattr(det, "min_env", 0.0))
-            min_peak = float(getattr(det, "min_peak", 0.0))
-        else:
-            env_ms = search_ms = refractory_ms = 0
-            min_env = min_peak = 0.0
-
-        det_str = (
-            f"EMA_env={env_ms}ms; "
-            f"search=±{search_ms}ms; "
-            f"refractory={refractory_ms}ms; "
-            f"min_env={min_env:.1f}; min_peak={min_peak:.1f}"
-        )
-
-        # ---------- 暖機規則（若有設定） ----------
-        warm_sec   = float(getattr(self, "rr_warmup_sec", 0.0) or 0.0)
-        warm_beats = int(getattr(self, "rr_warmup_beats", 0) or 0)
-        warm_either = bool(getattr(self, "rr_warmup_either", False))
-        warmup_txt = f"skip_first_sec={warm_sec:g}; skip_first_beats={warm_beats}; either={warm_either}"
-
-        # ---------- 組裝檔頭 ----------
-        header = [
-            file_name_line,
-            "# FORMAT: RR intervals (ms), one per line",
-            f"# SUBJECT_ID: {subject_id}",
-            f"# Name: {subject_name}",
-            f"# AGE: {subject_age}",
-            f"# SEX: {subject_sex}",
-            f"# DEVICE: BITalino (r)evolution; fs={fs} Hz; channel={chan_txt}",
-            f"# LEAD: {lead}",
-            f"# START_TIME: {start_iso}",
-            f"# DURATION_S: {dur_s:.1f}",
-            f"# RR_COUNT: {n}",
-            "# UNITS: ms",
-            "# DATA_STATUS: raw-detected (no ectopic removal)",
-            f"# FILTER: {filt_str}",
-            f"# DETECTOR: {det_str}",
-            f"# WARMUP: {warmup_txt}",
-            "# CLEANING: outliers <300 or >2000 ms removed=NO",
-            f"# METRICS: meanRR={mean_rr:.1f} ms; meanHR={mean_hr:.1f} bpm; SDNN={sdnn:.1f} ms; RMSSD={rmssd:.1f} ms",
-            f"# POSTURE: {posture}",
-            f"# NOTES: {notes}",
-            ""
-        ]
-        return "\n".join(header)
-
-
 
     # ── UI 小工具 ───────────────────────────────────────────────
     def _set_hr(self, rt: str, stable: str):

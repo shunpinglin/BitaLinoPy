@@ -2,7 +2,7 @@
 """
 App entrypoint.
 - Loads Qt UI (ui/ui_ecg.py), builds a PlotWidget into chart area
-- Wires toolbar actions (Connect/Disconnect/Start/Stop/Auto-connect/+ Pick Device/COM)
+- Wires toolbar actions (Connect/Disconnect/Start/Pause-Resume toggle/Auto-connect/+ Pick Device/COM)
 - Instantiates ECGController with config + UI widgets
 - On launch: auto-resolve device address (COM/MAC) and try to connect (no streaming yet)
 """
@@ -11,6 +11,11 @@ import json
 import tomllib
 from pathlib import Path
 from PyQt6 import QtWidgets, QtCore
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QCheckBox, QComboBox, QStatusBar
+)
+
 import pyqtgraph as pg
 
 from ui.ui_ecg import Ui_MainWindow
@@ -132,9 +137,20 @@ class Main(QtWidgets.QMainWindow):
             btn_save_rr=self.ui.saveRRButton,      # 儲存 RR 按鈕
             btn_analyze=self.ui.analyzeHRVButton,  # HRV 分析按鈕
             cfg=cfg,
+            lbl_rr_count=self.ui.lblRRCount
+        )
+        
+        # 建立 controller 後，綁定 UI 欄位（用你的元件名稱替換）
+        self.controller.bind_subject_inputs(
+        self.ui.nameEdit,   # QLineEdit：姓名
+        self.ui.ageEdit,    # QLineEdit：年齡（數字）
+        self.ui.maleRadio,  # QRadioButton：男
+        self.ui.femaleRadio # QRadioButton：女  
         )
 
-        # ⑥ 工具列（清單 -> 連線 -> 開始 -> 停止 -> 斷線）
+        self.controller.bind_subject_inputs(self.ui.nameEdit, self.ui.ageEdit, self.ui.maleRadio, self.ui.femaleRadio)
+
+        # ⑥ 工具列（清單 -> 連線 -> 開始 -> 暫停/續傳(切換) -> 斷線）
         tb = self.ui.toolBar
         tb.clear()
 
@@ -145,10 +161,13 @@ class Main(QtWidgets.QMainWindow):
         self.portCombo.setPlaceholderText("掃描中…")
         tb.addWidget(self.portCombo)
 
-        # 連線 / 開始 / 停止 / 斷線（依你的指定順序）
+        # 連線 / 開始 / 暫停-續傳(切換) / 斷線
         actConnect = tb.addAction("連線")
         actStart = tb.addAction("開始")
-        actStop = tb.addAction("停止")
+        # ★ 單一切換鍵：暫停 ↔ 續傳
+        self.btnPauseResume = QtWidgets.QPushButton("暫停")
+        self.btnPauseResume.setEnabled(False)   # 初始停用；開始後再啟用
+        tb.addWidget(self.btnPauseResume)
         actDisconnect = tb.addAction("斷線")
         tb.addSeparator()
 
@@ -172,18 +191,17 @@ class Main(QtWidgets.QMainWindow):
         if not supports_notch:
             self.actNotch.setEnabled(False)
 
-        # 綁定前 4 個基本動作
-        # actConnect.triggered.connect(self.controller.connect_device)
+        # 綁定基本動作
         actConnect.triggered.connect(self._on_connect_clicked)
-        actStart.triggered.connect(self.controller.start_stream)
-        actStop.triggered.connect(self.controller.stop_stream)
-        actDisconnect.triggered.connect(self.controller.disconnect_device)
+        actStart.triggered.connect(self._on_start_clicked)         # 包一層，啟用切換鍵
+        self.btnPauseResume.clicked.connect(self.on_toggle_pause)  # ★ 暫停/續傳 切換
+        actDisconnect.triggered.connect(self._on_disconnect_clicked)
 
         # 下拉改變時僅提示，不自動連線（避免誤觸）
         self.portCombo.activated.connect(self._on_combo_changed)
 
         # 啟動：先掃描清單，再嘗試用「上次成功的位址」自動連線
-        self._populate_port_combo()           # 先把清單顯示出來
+        self._populate_port_combo()            # 先把清單顯示出來
         self._autoconnect_last_then_sync_ui()  # 若上次有記錄，嘗試直接連線
 
         # 保存配置參數供自動連接使用
@@ -195,6 +213,30 @@ class Main(QtWidgets.QMainWindow):
         # ✅ 啟動後 500ms 自動嘗試連線（只「連線」，不開始串流）
         if _HAS_AUTOCONNECT:
             QtCore.QTimer.singleShot(500, self._auto_connect_on_launch)
+
+    # ---- 開始（包裝：成功後啟用切換鍵並設為「暫停」） ----
+    def _on_start_clicked(self):
+        if self.controller.start_stream():
+            self.btnPauseResume.setEnabled(True)
+            self.btnPauseResume.setText("暫停")
+
+    # ---- 暫停↔續傳：單一切換鍵 ----
+    def on_toggle_pause(self):
+        # 正在擷取 → 暫停
+        if getattr(self.controller, "_is_streaming", False):
+            self.controller.pause_stream()
+            self.btnPauseResume.setText("續傳")
+        else:
+            # 已暫停/未擷取 → 續傳（resume_stream 回傳 bool）
+            ok = self.controller.resume_stream()
+            if ok:
+                self.btnPauseResume.setText("暫停")
+
+    # ---- 斷線（包裝：停用切換鍵並重置文字） ----
+    def _on_disconnect_clicked(self):
+        self.controller.disconnect_device()
+        self.btnPauseResume.setEnabled(False)
+        self.btnPauseResume.setText("暫停")
 
     # ---- 啟動時自動連線（只連線，不開始串流）----
     def _auto_connect_on_launch(self):
@@ -298,7 +340,6 @@ class Main(QtWidgets.QMainWindow):
             for p in list_ports.comports():
                 out.append((p.device, f"{p.device} – {p.description}"))
             # 依 COM 編號排序
-
             def _key(t):
                 name = t[0]
                 try:
@@ -383,7 +424,7 @@ class Main(QtWidgets.QMainWindow):
 
         # 若一個也沒有，就退回列出本機 COM Port（需 pyserial）
         if not labels and _HAS_PYSERIAL:
-            ports = list(serial.tools.list_ports.comports())
+            ports = list(list_ports.comports())
             for p in ports:
                 labels.append(f"{p.device} ({p.description})")
                 addresses.append(p.device)
@@ -425,6 +466,6 @@ class Main(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     w = Main()
-    w.resize(800, 500)
+    w.resize(1000, 600)
     w.show()
     sys.exit(app.exec())

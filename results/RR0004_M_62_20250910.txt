@@ -1,0 +1,28 @@
+# File Name: RR0004_M_62_20250910.txt
+# FORMAT: RR intervals (ms), one per line
+# SUBJECT_ID: RR0004
+# Name: 林測試
+# AGE: 62
+# SEX: M
+# DEVICE: BITalino (r)evolution; fs=1000 Hz; channel=A1
+# LEAD: Lead II
+# START_TIME: 2025-09-10T12:38:44+08:00
+# DURATION_S: 33.6
+# RR_COUNT: 8
+# UNITS: ms
+# DATA_STATUS: raw-detected (no ectopic removal)
+# FILTER: bandpass 0.67–30.0 Hz; notch 60 Hz=OFF
+# DETECTOR: EMA_env=100ms; search=±60ms; refractory=240ms; min_env=0.0; min_peak=0.0
+# WARMUP: skip_first_sec=30; skip_first_beats=30; either=True
+# CLEANING: outliers <300 or >2000 ms removed=NO
+# METRICS: meanRR=856.0 ms; meanHR=70.1 bpm; SDNN=2.7 ms; RMSSD=4.2 ms
+# POSTURE: 
+# NOTES: 
+851
+861
+856
+856
+856
+856
+856
+856

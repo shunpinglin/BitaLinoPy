@@ -1,0 +1,106 @@
+# File Name: SUBJECT_ID + SEX + age + Date, Example: RR0006_M_62_20250909.txt
+# FORMAT: RR intervals (ms), one per line
+# SUBJECT_ID: RR0001
+# Name: 林測試
+# AGE: 6-120
+# SEX: F or M
+# DEVICE: BITalino (r)evolution; fs=1000 Hz; channel=A1
+# LEAD: Lead II (R-arm +, L-arm - +, right knee - reference)
+# START_TIME: 2025-09-09T17:20:19.429013+08:00
+# DURATION_S: 75.1
+# RR_COUNT: 86
+# UNITS: ms
+# DATA_STATUS: raw-detected (no ectopic removal)
+# FILTER: bandpass 0.5–25.0 Hz; notch 60 Hz=OFF
+# DETECTOR: EMA_env=100ms; search=±60ms; refractory=240ms; min_env=0.0; min_peak=0.0
+# CLEANING: outliers <300 or >2000 ms removed=NO
+# METRICS: meanRR=856.0 ms; meanHR=70.1 bpm; SDNN=76.7 ms; RMSSD=138.4 ms
+# POSTURE: Quiet Sitting
+# NOTES: 
+
+856
+856
+856
+856
+856
+848
+864
+856
+856
+856
+856
+856
+856
+856
+696
+891
+456
+856
+856
+856
+856
+852
+860
+856
+856
+856
+856
+856
+856
+856
+848
+864
+856
+856
+856
+856
+856
+856
+856
+856
+856
+856
+856
+856
+856
+856
+852
+860
+857
+856
+855
+856
+857
+856
+855
+848
+865
+856
+856
+856
+856
+856
+855
+857
+843
+869
+856
+856
+856
+856
+856
+851
+861
+856
+856
+856
+856
+856
+856
+856
+847
+865
+856
+856
+856
+856
