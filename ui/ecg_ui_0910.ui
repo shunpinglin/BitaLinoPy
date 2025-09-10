@@ -2,14 +2,6 @@
 <ui version="4.0">
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>1305</width>
-    <height>660</height>
-   </rect>
-  </property>
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
@@ -19,7 +11,7 @@
      <rect>
       <x>10</x>
       <y>10</y>
-      <width>1281</width>
+      <width>981</width>
       <height>111</height>
      </rect>
     </property>
@@ -121,9 +113,9 @@
     <widget class="QLabel" name="RealTimeHR">
      <property name="geometry">
       <rect>
-       <x>510</x>
+       <x>390</x>
        <y>40</y>
-       <width>231</width>
+       <width>211</width>
        <height>31</height>
       </rect>
      </property>
@@ -140,9 +132,9 @@
     <widget class="QLabel" name="StableHR">
      <property name="geometry">
       <rect>
-       <x>870</x>
+       <x>650</x>
        <y>20</y>
-       <width>301</width>
+       <width>211</width>
        <height>71</height>
       </rect>
      </property>
@@ -231,24 +223,22 @@
      <rect>
       <x>10</x>
       <y>130</y>
-      <width>1281</width>
-      <height>401</height>
+      <width>981</width>
+      <height>321</height>
      </rect>
     </property>
     <property name="font">
      <font>
       <family>微軟正黑體</family>
-      <pointsize>20</pointsize>
-      <weight>75</weight>
-      <bold>true</bold>
+      <pointsize>10</pointsize>
      </font>
     </property>
    </widget>
    <widget class="QPushButton" name="saveRRButton">
     <property name="geometry">
      <rect>
-      <x>460</x>
-      <y>550</y>
+      <x>550</x>
+      <y>480</y>
       <width>151</width>
       <height>41</height>
      </rect>
@@ -266,8 +256,8 @@
    <widget class="QPushButton" name="analyzeHRVButton">
     <property name="geometry">
      <rect>
-      <x>770</x>
-      <y>550</y>
+      <x>730</x>
+      <y>480</y>
       <width>151</width>
       <height>41</height>
      </rect>
@@ -285,8 +275,8 @@
    <widget class="QLabel" name="lblRRCount">
     <property name="geometry">
      <rect>
-      <x>240</x>
-      <y>560</y>
+      <x>20</x>
+      <y>490</y>
       <width>211</width>
       <height>21</height>
      </rect>
@@ -307,7 +297,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1305</width>
+     <width>1000</width>
      <height>25</height>
     </rect>
    </property>

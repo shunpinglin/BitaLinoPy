@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 import pyqtgraph as pg
+from PyQt6.QtGui import QFont
 
 from ui.ui_ecg import Ui_MainWindow
 from controllers.ecg_controller import ECGController
@@ -139,16 +140,20 @@ class Main(QtWidgets.QMainWindow):
             cfg=cfg,
             lbl_rr_count=self.ui.lblRRCount
         )
-        
+
         # 建立 controller 後，綁定 UI 欄位（用你的元件名稱替換）
         self.controller.bind_subject_inputs(
-        self.ui.nameEdit,   # QLineEdit：姓名
-        self.ui.ageEdit,    # QLineEdit：年齡（數字）
-        self.ui.maleRadio,  # QRadioButton：男
-        self.ui.femaleRadio # QRadioButton：女  
+            self.ui.nameEdit,   # QLineEdit：姓名
+            self.ui.ageEdit,    # QLineEdit：年齡（數字）
+            self.ui.maleRadio,  # QRadioButton：男
+            self.ui.femaleRadio  # QRadioButton：女
         )
 
-        self.controller.bind_subject_inputs(self.ui.nameEdit, self.ui.ageEdit, self.ui.maleRadio, self.ui.femaleRadio)
+        self.controller.bind_subject_inputs(
+            self.ui.nameEdit, self.ui.ageEdit, self.ui.maleRadio, self.ui.femaleRadio)
+
+        # 套用 UI 樣式
+        self._apply_ui_from_config(cfg)
 
         # ⑥ 工具列（清單 -> 連線 -> 開始 -> 暫停/續傳(切換) -> 斷線）
         tb = self.ui.toolBar
@@ -213,6 +218,92 @@ class Main(QtWidgets.QMainWindow):
         # ✅ 啟動後 500ms 自動嘗試連線（只「連線」，不開始串流）
         if _HAS_AUTOCONNECT:
             QtCore.QTimer.singleShot(500, self._auto_connect_on_launch)
+
+        ui_cfg = cfg.get("ui", {})
+        center_on_start = bool(ui_cfg.get("center_on_start", True))
+        start_maximized = bool(ui_cfg.get("start_maximized", False))
+
+    # === 啟動後執行：解鎖可拖動 + 置中/或最大化 ===
+    def _post_show_adjust():
+        # 1) 確保是「一般可拖動」的視窗（不是無框/自訂對話框）
+        flags = self.windowFlags()
+        # 移除不利於拖動的旗標
+        flags &= ~QtCore.Qt.WindowType.FramelessWindowHint
+        flags &= ~QtCore.Qt.WindowType.CustomizeWindowHint
+        # 確保是標準 Window
+        flags |= QtCore.Qt.WindowType.Window
+        self.setWindowFlags(flags)
+        # 重新顯示讓 flags 生效
+        self.show()
+
+        # 2) 解除最大化/全螢幕鎖定（如果有）
+        self.setWindowState(QtCore.Qt.WindowState.WindowNoState)
+
+        # 3) 最大化或置中（二擇一）
+        if start_maximized:
+            self.showMaximized()
+        elif center_on_start:
+            _center_on_screen()
+
+    def _center_on_screen():
+        # 把幾何置中在目前螢幕的可用區域（避開工作列）
+        screen = self.screen() or QtWidgets.QApplication.primaryScreen()
+        avail = screen.availableGeometry()
+        rect = QtWidgets.QStyle.alignedRect(
+            QtCore.Qt.LayoutDirection.LeftToRight,
+            QtCore.Qt.AlignmentFlag.AlignCenter,
+            self.size(),
+            avail
+        )
+        self.setGeometry(rect)
+
+        # 用 singleShot(0) 確保在 show() 之後再置中
+        QtCore.QTimer.singleShot(0, _post_show_adjust)
+
+    def _apply_ui_from_config(self, cfg: dict):
+        """從 config.toml 的 [ui] 讀取樣式並套用：心跳兩標籤的顏色/粗細/大小、全域字型、狀態列顏色。"""
+        ui = cfg.get("ui", {})
+
+        # 全域預設字型（整個視窗）
+        fam = ui.get("font_family", "Microsoft JhengHei UI")
+        base_size = int(ui.get("font_size", 11))
+        self.setFont(QFont(fam, base_size))
+
+        # ── 即時心跳（藍色，預設不粗體，大小可調） ──
+        rt_color = ui.get("rt_hr_color", "#2962FF")   # 藍
+        rt_size = int(ui.get("rt_hr_size", 16))
+        rt_bold = bool(ui.get("rt_hr_bold", False))
+        f_rt = QFont(fam, rt_size)
+        f_rt.setBold(rt_bold)
+        self.ui.RealTimeHR.setFont(f_rt)
+        self.ui.RealTimeHR.setStyleSheet(f"color:{rt_color};")
+
+        # ── 穩定心跳（紅色＋粗體，大小可調） ──
+        st_color = ui.get("stable_hr_color", "#D32F2F")  # 紅
+        st_size = int(ui.get("stable_hr_size", 16))
+        st_bold = bool(ui.get("stable_hr_bold", True))
+        f_st = QFont(fam, st_size)
+        f_st.setBold(st_bold)
+        self.ui.StableHR.setFont(f_st)
+        self.ui.StableHR.setStyleSheet(f"color:{st_color};")
+
+        # 狀態列文字顏色
+        status_col = ui.get("status_text_color", "#616161")
+        self.statusBar().setStyleSheet(f"QStatusBar {{ color:{status_col}; }}")
+
+        # 工具列按鈕字重（可選）
+        if hasattr(self.ui, "toolBar") and self.ui.toolBar is not None:
+            tb_bold = "700" if ui.get("toolbar_button_bold", True) else "400"
+            self.ui.toolBar.setStyleSheet(
+                f"QToolBar QToolButton {{ font-weight:{tb_bold}; }}")
+
+        # （選配）pyqtgraph 座標與標題樣式
+        label_color = ui.get("plot_label_color", "#90A4AE")
+        axis_label_size = ui.get("axis_label_size", "12pt")
+        self.plot.setLabel("left", "Amplitude", **
+                           {"color": label_color, "size": axis_label_size})
+        self.plot.setLabel("bottom", "Time", "s", **
+                           {"color": label_color, "size": axis_label_size})
 
     # ---- 開始（包裝：成功後啟用切換鍵並設為「暫停」） ----
     def _on_start_clicked(self):
@@ -340,6 +431,7 @@ class Main(QtWidgets.QMainWindow):
             for p in list_ports.comports():
                 out.append((p.device, f"{p.device} – {p.description}"))
             # 依 COM 編號排序
+
             def _key(t):
                 name = t[0]
                 try:
@@ -466,6 +558,6 @@ class Main(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     w = Main()
-    w.resize(1000, 600)
+    w.resize(1300, 680)
     w.show()
     sys.exit(app.exec())
